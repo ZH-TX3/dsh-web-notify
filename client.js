@@ -5,8 +5,11 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const STORAGE_KEY = 'dsh-web-notify:enabled';
-    const NOTIFY_TITLE = '✅ 对话已完成';
+    const NOTIFY_BODY = '✅ 对话已完成';
     const supported = typeof Notification !== 'undefined';
+
+    /** Set by apply(): opens the notified Session through the workspace service. */
+    const opener = { current: null };
 
     function readEnabled() {
       try {
@@ -51,32 +54,49 @@ window.__ModuleLoader__.load({
       notifyListeners();
     }
 
-    /** Session title from the list projections, falling back to the cwd basename. */
-    function describe(snapshot, id, row) {
-      const title = snapshot?.projectionsBySession?.[id]?.values?.title;
-      if (typeof title === 'string' && title.trim() !== '') return title.trim();
-      if (typeof row.cwd === 'string' && row.cwd !== '') {
-        const parts = row.cwd.split(/[\\/]/).filter(Boolean);
-        return parts[parts.length - 1] ?? row.cwd;
-      }
-      return '会话';
+    function tail(path) {
+      if (typeof path !== 'string' || path === '') return '';
+      const parts = path.split(/[\\/]/).filter(Boolean);
+      return parts[parts.length - 1] ?? path;
     }
 
-    function announce(body) {
+    /** Session title from the list projections; the cwd basename is the fallback. */
+    function describe(snapshot, id, row) {
+      const title = snapshot?.projectionsBySession?.[id]?.values?.title;
+      const project = tail(row.cwd);
+      if (typeof title === 'string' && title.trim() !== '') return { title: title.trim(), project };
+      return { title: project || '会话', project: '' };
+    }
+
+    function openSession(id) {
+      try {
+        window.focus();
+      } catch {
+        /* focus may be denied outside a gesture */
+      }
+      const open = opener.current;
+      if (!open) return;
+      try {
+        open(id);
+      } catch {
+        /* navigation failures must not break the click handler */
+      }
+    }
+
+    function announce(id, info) {
       if (!state.enabled || !supported) return;
       if (Notification.permission !== 'granted') return;
       try {
-        const notification = new Notification(NOTIFY_TITLE, {
-          body,
-          tag: 'dsh-web-notify',
+        const notification = new Notification(info.title, {
+          body:
+            info.project === '' || info.project === info.title
+              ? NOTIFY_BODY
+              : `${NOTIFY_BODY} · 📂 ${info.project}`,
+          tag: `dsh-web-notify:${id}`,
           renotify: true,
         });
         notification.onclick = () => {
-          try {
-            window.focus();
-          } catch {
-            /* focus may be denied outside a gesture */
-          }
+          openSession(id);
           notification.close();
         };
       } catch {
@@ -192,6 +212,10 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       const sessions = ctx.get('sessions');
       const list = sessions?.list;
+      const workspace = ctx.get('uiWorkspace');
+      if (workspace && typeof workspace.openSession === 'function') {
+        opener.current = (id) => workspace.openSession(id);
+      }
       if (!list) return;
 
       const running = new Map();
@@ -213,7 +237,7 @@ window.__ModuleLoader__.load({
           }
 
           running.set(id, false);
-          if (was === true) announce(describe(snapshot, id, row));
+          if (was === true) announce(id, describe(snapshot, id, row));
         }
 
         for (const id of running.keys()) {
@@ -239,6 +263,6 @@ window.__ModuleLoader__.load({
       );
     }
 
-    return { inject: ['slots', 'sessions'], apply };
+    return { inject: ['slots', 'sessions', 'uiWorkspace'], apply };
   },
 });
