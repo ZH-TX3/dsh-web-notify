@@ -9,7 +9,9 @@
     "./client": "./client.js"
   },
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "immediately": false,
@@ -17,6 +19,12 @@
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-api-session-controller"
       ]
+    },
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.2",
+      "dshReleases": {
+        "0.2.0-rc.2": "compatible"
+      }
     }
   },
   "scripts": {
