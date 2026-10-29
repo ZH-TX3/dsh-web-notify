@@ -18,16 +18,22 @@ DSH 的「对话完成」浏览器桌面通知插件。
 
 ```bash
 # 锁死 commit：可复现，改 sha 就是升级
-dsh plugin install git+https://github.com/ZH-TX3/dsh-web-notify.git#3ecb624
+dsh plugin install git+https://github.com/ZH-TX3/dsh-web-notify.git#<sha>
 ```
 
-`dsh plugin ...` 把参数原样转给 profile 目录里的 pnpm，所以任何 pnpm 支持的 spec 都行。本包没有 `prepare` 脚本，纯 JS 直装，不需要在 `pnpm-workspace.yaml` 里放行构建。
+`dsh plugin ...` 把参数原样转给 profile 目录里的 pnpm，所以任何 pnpm 支持的 spec 都行。
+pnpm 会把它规整成 `github:ZH-TX3/dsh-web-notify#<sha>`，按 codeload tarball 取包并锁 sha512，于是：
 
-agent 侧等价写法：
+- 不走 git clone，也不依赖本地 git 二进制
+- 仓库是 public 的，安装不需要凭据
+- commit 不可变，锁文件里有 integrity，换 sha 就等于升级
+- 本包没有 `prepare` 脚本，纯 JS 直装，不需要在 `pnpm-workspace.yaml` 放行构建
 
-```
-action: install_bundle
-target: git+https://github.com/ZH-TX3/dsh-web-notify.git#<sha>
+升级到最新提交：
+
+```bash
+SHA=$(git ls-remote https://github.com/ZH-TX3/dsh-web-notify.git HEAD | cut -f1)
+dsh plugin install "github:ZH-TX3/dsh-web-notify#${SHA:0:7}"
 ```
 
 改代码时要即时生效，换成本地目录（`link:`，你改文件插件就跟着变）：
@@ -35,6 +41,8 @@ target: git+https://github.com/ZH-TX3/dsh-web-notify.git#<sha>
 ```bash
 dsh plugin install D:\ds\plugins\dsh-web-notify
 ```
+
+link ↔ git 之间切换会返回 `restart-required`，重启 DSH 才换得掉模块。
 
 装好后侧边栏底部（设置按钮旁边）多一个铃铛：
 
