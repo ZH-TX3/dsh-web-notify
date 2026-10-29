@@ -1,0 +1,5 @@
+# web-notify —— 对话完成即发浏览器桌面通知。
+# 宿主组合一行不改：只 insert 自己的客户端插件行。
+- insert:
+    - id: web-notify
+      name: '@local/dsh-web-notify'

@@ -1,0 +1,25 @@
+{
+  "name": "@local/dsh-web-notify",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "对话完成时发浏览器桌面通知的 DSH 插件（Web Notification），侧边栏铃铛开关。",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": false,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-api-session-controller"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node scripts/selftest.mjs"
+  }
+}
