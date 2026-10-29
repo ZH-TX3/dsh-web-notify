@@ -14,16 +14,26 @@ DSH 的「对话完成」浏览器桌面通知插件。
 
 ## 安装
 
+直接从 GitHub 装，不用先 clone：
+
 ```bash
-# 以 bundle 方式装进当前 profile
-dsh plugin install /path/to/dsh-web-notify
+# 锁死 commit：可复现，改 sha 就是升级
+dsh plugin install git+https://github.com/ZH-TX3/dsh-web-notify.git#3ecb624
 ```
 
-或让 agent 调 `plugin_manager`：
+`dsh plugin ...` 把参数原样转给 profile 目录里的 pnpm，所以任何 pnpm 支持的 spec 都行。本包没有 `prepare` 脚本，纯 JS 直装，不需要在 `pnpm-workspace.yaml` 里放行构建。
+
+agent 侧等价写法：
 
 ```
 action: install_bundle
-target: D:\ds\plugins\dsh-web-notify
+target: git+https://github.com/ZH-TX3/dsh-web-notify.git#<sha>
+```
+
+改代码时要即时生效，换成本地目录（`link:`，你改文件插件就跟着变）：
+
+```bash
+dsh plugin install D:\ds\plugins\dsh-web-notify
 ```
 
 装好后侧边栏底部（设置按钮旁边）多一个铃铛：
