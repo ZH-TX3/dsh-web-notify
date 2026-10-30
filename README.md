@@ -1,16 +1,24 @@
 # dsh-web-notify
 
-DSH 的「对话完成」浏览器桌面通知插件。
+DSH 的浏览器桌面通知插件：对话完成、需要授权、需要回答 `ask_user_question` 时各弹一条，点一下就跳回那条对话。
 
-参考 Claude Code 的 `notify.py` hook 行为，但把通知点从进程级 toast 搬到 Web 端：会话从运行中变回空闲的那一刻，浏览器弹一条系统通知 —— 标题是该会话的标题，正文是 `✅ 对话已完成`（带项目名），点一下就跳回那条对话。
+参考 Claude Code 的 `notify.py` hook 行为，但把通知点从进程级 toast 搬到 Web 端。三种通知，同一套收件人：标题是该会话的标题，正文以事件开头，点通知回会话。
+
+| 事件 | 触发源 | 正文 |
+| --- | --- | --- |
+| 对话完成 | `ctx.sessions.list` 里 `running: true → false` | `✅ 对话已完成 · 📂 <项目>` |
+| 需要授权 | `remote.$on('approval/request')` | `🔐 需要授权 · <工具名>` |
+| 需要回答 | `remote.$on('user-questions/request')` | `❓ 需要回答 · <header 或问题文本>` |
 
 ## 行为
 
 - 监听 `ctx.sessions.list`，按 `sessionId` 记录 `running`，`true → false` 才通知，不会因为列表刷新重复弹。
-- 通知标题取会话的 `title` 投影，没有就退回工作目录名。
-- 正文是 `✅ 对话已完成 · 📂 <项目名>`；标题已经等于项目名时只留 `✅ 对话已完成`。
-- 通知 `tag` 按 `sessionId` 生成，多个会话各占一条，同一会话的新通知覆盖旧的。
+- 通知标题取会话的 `title` 投影，没有就退回工作目录名；授权/回答通知复用列表里缓存的标题。
+- 正文带项目名时是 `✅ 对话已完成 · 📂 <项目名>`；标题已经等于项目名时只留 `✅ 对话已完成`。
+- 两个 attention 事件都是 Host 的 waterfall：先发通知，再无条件把请求交给下一个处理者（`return next()`）。通知路径里任何异常都被吞掉，不会挡住授权或问题本身。
+- 通知 `tag` 是 `dsh-web-notify:<sessionId>:<kind>`，多会话多事件各自一条，同类同会话才覆盖。
 - **点通知会聚焦窗口，再调 `uiWorkspace.openSession(sessionId)` 跳到那条对话**（会话在别的 workspace 也能拉回来）。
+- 找不到会话 id 时（作用域解析失败）照样发通知，标题退回「会话」，点击只聚焦不跳转。
 - `origin: 'subagent'` 的子会话不通知，避免一次主对话结束弹一串。
 - 插件加载时已经在跑的会话也会被记录，因此中途打开页面照样能收到完成通知。
 - 通知开关存 `localStorage`（键 `dsh-web-notify:enabled`），默认开。

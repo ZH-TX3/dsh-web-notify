@@ -11,6 +11,9 @@ window.__ModuleLoader__.load({
     /** Set by apply(): opens the notified Session through the workspace service. */
     const opener = { current: null };
 
+    /** Last seen Session titles, so approval and question notifications can name the session. */
+    const titles = new Map();
+
     function readEnabled() {
       try {
         return globalThis.localStorage?.getItem(STORAGE_KEY) !== 'off';
@@ -61,11 +64,18 @@ window.__ModuleLoader__.load({
     }
 
     /** Session title from the list projections; the cwd basename is the fallback. */
-    function describe(snapshot, id, row) {
-      const title = snapshot?.projectionsBySession?.[id]?.values?.title;
-      const project = tail(row.cwd);
-      if (typeof title === 'string' && title.trim() !== '') return { title: title.trim(), project };
-      return { title: project || '会话', project: '' };
+    function titleOf(snapshot, id, row) {
+      const projected = snapshot?.projectionsBySession?.[id]?.values?.title;
+      if (typeof projected === 'string' && projected.trim() !== '') return projected.trim();
+      const project = tail(row?.cwd);
+      return project === '' ? '会话' : project;
+    }
+
+    function excerpt(text, max = 60) {
+      const flat = String(text ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
     }
 
     function openSession(id) {
@@ -83,20 +93,18 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function announce(id, info) {
+    /** One notification per kind and Session; the click jumps back to that Session. */
+    function deliver(id, kind, body, title) {
       if (!state.enabled || !supported) return;
       if (Notification.permission !== 'granted') return;
       try {
-        const notification = new Notification(info.title, {
-          body:
-            info.project === '' || info.project === info.title
-              ? NOTIFY_BODY
-              : `${NOTIFY_BODY} · 📂 ${info.project}`,
-          tag: `dsh-web-notify:${id}`,
+        const notification = new Notification(title || titles.get(id) || '会话', {
+          body,
+          tag: `dsh-web-notify:${id ?? 'unknown'}:${kind}`,
           renotify: true,
         });
         notification.onclick = () => {
-          openSession(id);
+          if (id) openSession(id);
           notification.close();
         };
       } catch {
@@ -230,6 +238,9 @@ window.__ModuleLoader__.load({
           if (!row || row.origin === 'subagent') continue;
           seen.add(id);
 
+          const title = titleOf(snapshot, id, row);
+          if (title !== '会话') titles.set(id, title);
+
           const was = running.get(id);
           if (row.running) {
             running.set(id, true);
@@ -237,7 +248,15 @@ window.__ModuleLoader__.load({
           }
 
           running.set(id, false);
-          if (was === true) announce(id, describe(snapshot, id, row));
+          if (was === true) {
+            const project = tail(row.cwd);
+            deliver(
+              id,
+              'done',
+              project !== '' && project !== title ? `${NOTIFY_BODY} · 📂 ${project}` : NOTIFY_BODY,
+              title,
+            );
+          }
         }
 
         for (const id of running.keys()) {
@@ -249,6 +268,40 @@ window.__ModuleLoader__.load({
         scan(list.getSnapshot());
         return list.subscribe(() => scan(list.getSnapshot()));
       }, 'web-notify: watch session turns');
+
+      // Both are Host waterfalls: notify first, then always hand the request on.
+      const remote = ctx.get('remote');
+      if (remote && typeof remote.$on === 'function') {
+        ctx.effect(() => {
+          const offApproval = remote.$on('approval/request', function (request, next) {
+            try {
+              const id = sessions.scopeOf?.(this);
+              const tool = excerpt(request?.toolName, 40);
+              deliver(id, 'approval', tool === '' ? '🔐 需要授权' : `🔐 需要授权 · ${tool}`);
+            } catch {
+              /* a notification must never break the approval waterfall */
+            }
+            return next();
+          });
+
+          const offQuestion = remote.$on('user-questions/request', function (request, next) {
+            try {
+              const id = sessions.scopeOf?.(this);
+              const first = request?.questions?.[0];
+              const asked = excerpt(first?.header || first?.question || '', 60);
+              deliver(id, 'question', asked === '' ? '❓ 需要回答' : `❓ 需要回答 · ${asked}`);
+            } catch {
+              /* a notification must never break the question waterfall */
+            }
+            return next();
+          });
+
+          return () => {
+            offApproval();
+            offQuestion();
+          };
+        }, 'web-notify: attention events');
+      }
 
       ctx.slots.inject('sidebar.footer.action', () =>
         ctx.slots.register(
